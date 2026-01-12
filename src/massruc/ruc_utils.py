@@ -10,23 +10,52 @@ RUC_QUERY_ERRORS = {
 }
 
 
-def descargar_padron_reducido(output_file, progress_callback=None):
+def descargar_padron_reducido(
+    output_file="padron_reducido_ruc.zip", progress_callback=None
+):
+    """
+    Descarga el padrón RUC reducido oficial de la SUNAT (URL en `URL_PADRON`) y lo guarda en `output_file`, que por defecto es `padron_reducido_ruc.zip`
+
+    Args:
+        output_file (str): Ruta o nombre del archivo destino (.zip).
+        progress_callback (callable, optional): Función que recibe un `float` (0.0 - 1.0) para reportar el progreso de la descarga.
+
+    Returns:
+        str: Ruta del archivo descargado.
+    """
     response = requests.get(URL_PADRON, stream=True)
-    total_length = int(response.headers.get("content-length", 0))
+    response.raise_for_status()
+
+    total_length = response.headers.get("content-length")
     dl = 0
     with open(output_file, "wb") as f:
-        bar = Progress()
-        bar.start()
-        tarea = bar.add_task("Descargando padrón", total=1)
-        for data in response.iter_content(chunk_size=4096):
-            dl += len(data)
-            f.write(data)
-            if total_length:
-                porcentaje = dl / total_length
-                bar.update(tarea, completed=porcentaje)
-                progress_callback(porcentaje) if progress_callback else None
-        bar.update(tarea, completed=1)
-        bar.stop()
+        with Progress() as bar:
+            tarea = None
+
+            if total_length is not None:
+                total_length = int(total_length)
+                tarea = bar.add_task("Descargando padrón", total=total_length)
+            else:
+                total_length = None
+                tarea = bar.add_task(
+                    "Descargando padrón (tamaño desconocido)", total=None
+                )
+
+            for data in response.iter_content(chunk_size=8192):
+                dl += len(data)
+                f.write(data)
+
+                if total_length:
+                    bar.update(tarea, completed=dl)
+                    if progress_callback:
+                        porcentaje = dl / total_length
+                        progress_callback(porcentaje)
+                else:
+                    bar.update(tarea, advance=len(data))
+                    if progress_callback:
+                        progress_callback(0)
+
+    return output_file
 
 
 def buscar_rucs(lista_rucs, path_db, table_name="main_table"):
@@ -59,7 +88,7 @@ def buscar_rucs(lista_rucs, path_db, table_name="main_table"):
                 db_cache[fila[0]] = fila
 
     except Exception as e:
-        print(f"Error consulting DB: {e}")
+        print(f"Error en consulta DB: {e}")
         return []
 
     finally:
@@ -91,6 +120,37 @@ def buscar_rucs(lista_rucs, path_db, table_name="main_table"):
             resultados_finales.append(tupla_vacia)
 
     return resultados_finales
+
+
+def buscar_ruc(
+    doc_number: str | int, path_db: str, table_name: str = "main_table"
+) -> tuple | None:
+    """
+    Docstring for buscar_ruc
+
+    Args:
+        doc_number: Número de documento (RUC o DNI)
+        path_db: Ruta del padrón ruc reducido (SQL)
+        table_name: Nombre de la tabla a consultar
+
+    Returns:
+        Tupla que contiene el resultado de la consulta `(ruc, nombre_o_razón_social, estado_de_contribuyente, condición_de_domicilio)` o `None` en caso de no encontrarlo
+    """
+    ruc_buscado = limpiar_ruc(doc_number)
+    if not ruc_buscado:
+        return None
+    else:
+        ruc_buscado = int(ruc_buscado)
+
+    con = sqlite3.connect(path_db)
+    cursor = con.cursor()
+
+    consulta = f"SELECT * FROM {table_name} WHERE ruc = {ruc_buscado}"
+    cursor.execute(consulta)
+
+    res = cursor.fetchone()
+    cursor.close()
+    return res if res else None
 
 
 def limpiar_rucs(lista_rucs):
