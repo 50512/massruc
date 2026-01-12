@@ -1,11 +1,19 @@
 import sqlite3
 import time
 from os import path, remove
+from typing import Callable
 
 import pandas as pd
 
 
-def count_lines(file_path):
+def count_lines(file_path: str) -> int:
+    """
+    Devuelve el número de lineas que contiene un archivo de texto.
+    Args:
+        file_path: Ruta del archivo a contar.
+    Returns:
+        Número de lineas del archivo.
+    """
     with open(file_path, "rb") as file:
         lines = 0
         buf_size = 1024 * 1024
@@ -18,7 +26,17 @@ def count_lines(file_path):
         return lines
 
 
-def sanitize_csv(input_file, output_file, expected_fields=4, separator="|"):
+def sanitize_csv(
+    input_file: str, output_file: str, expected_fields: int = 4, separator: str = "|"
+) -> None:
+    """
+    Convierte texto en `latin-1` a `UTF-8` y guarda los primeros `expected_fields` campos.
+    Args:
+        input_file: Ruta del archivo de entrada.
+        output_file: Ruta del archivo de salida.
+        expected_fields: Campos a guardar del CSV.
+        separator: Separador del CSV.
+    """
     clean_lines = []
 
     # open file on latin-1 for correct reading
@@ -39,14 +57,26 @@ def sanitize_csv(input_file, output_file, expected_fields=4, separator="|"):
 
 
 def convert_txt_to_sql(
-    input_txt,
-    output_db,
-    table_name="main_table",
-    separator="|",
-    chunk_size=5000,
-    progress_callback=None,
-):
-    """Convierte una entrada en txt o csv a una base de datos sql"""
+    input_txt: str,
+    output_db: str,
+    table_name: str = "main_table",
+    separator: str = "|",
+    chunk_size: int = 5000,
+    progress_callback: Callable[[float], None] | None = None,
+) -> str:
+    """
+    Convierte una entrada en txt o csv a una base de datos sql.
+    
+    Args:
+        input_txt: Ruta del archivo CSV o txt de entrada.
+        output_db: Ruta del archivo de destino.
+        table_name: Nombre de la tabla a guardar.
+        separator: Separador del archivo de entrada.
+        chunk_size: Tamaño del chunk con el que se procesará el archivo de entrada.
+        progress_callback: Función que recibe un `float` (0.0 - 1.0) para reportar el progreso de la conversión.
+    Returns:
+        Nombre del archivo de destino.
+    """
 
     connection = sqlite3.connect(output_db)
     cursor = connection.cursor()
@@ -115,6 +145,7 @@ def convert_txt_to_sql(
         cursor.execute("PRAGMA synchronous = NORMAL")
         cursor.execute("PRAGMA journal_mode = DELETE")
         connection.close()
+    return output_db
 
 
 def main():
