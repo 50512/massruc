@@ -6,11 +6,10 @@ import zipfile
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 import pandas as pd
-import requests
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 
-from massruc import ruc_utils, txt_to_db
+from massruc import ruc_utils, txt_to_db, utils
 
 # --- CONFIGURACIÓN ---
 SUNAT_FOLDER = "./.sunat-datos"
@@ -173,18 +172,22 @@ class SunatApp:
 
         self.btn_descargar.config(state="disabled")
         self.btn_procesar.config(state="disabled")
-        self.log("Iniciando descarga del Padrón SUNAT (300MB+)...")
+
+        if not os.path.exists(SUNAT_FOLDER):
+            os.mkdir(SUNAT_FOLDER)
 
         try:
-            if not os.path.exists(SUNAT_FOLDER):
-                os.mkdir(SUNAT_FOLDER)
-
+            self.log("Iniciando descarga del Padrón SUNAT (300MB+)...")
             ruc_utils.descargar_padron_reducido(
                 PATH_PADRON_ZIP, progress_callback=self.update_progress_bar
             )
 
+            if not utils.verificador_integridad_zip(PATH_PADRON_ZIP):
+                os.remove(PATH_PADRON_ZIP)
+                raise zipfile.BadZipFile(
+                    "Archivo dañado, por favor volver a descargar."
+                )
             self.log("Descarga completa.")
-            self.root.after(0, self.verificar_padron_local)
 
         except Exception as e:
             self.log(f"❌ Error en descarga: {str(e)}")
@@ -195,6 +198,7 @@ class SunatApp:
             if self.archivo_seleccionado.get():
                 self.btn_procesar.config(state="normal")
             self.progress["value"] = 0
+            self.root.after(0, self.verificar_padron_local)
 
     def seleccionar_excel(self):
         archivo = filedialog.askopenfilename(
@@ -307,27 +311,30 @@ class SunatApp:
         TEMP_SANITIZED_TXT = os.path.join(SUNAT_FOLDER, ".sanitized_db.tmp")
         TEMP_DB = PATH_PADRON_DB + ".tmp"
 
-        if not os.path.exists(PATH_PADRON_ZIP):
-            self.root.after(0, self.verificar_padron_local)
-            return
-
-        if not zipfile.is_zipfile(PATH_PADRON_ZIP):
-            os.remove(PATH_PADRON_ZIP)
-            self.root.after(0, self.verificar_padron_local)
-            return
-
-        if os.path.exists(TEMP_DB):
-            os.remove(TEMP_DB)
-
-        self.log("⚙️ Iniciando optimización...")
-        with zipfile.ZipFile(PATH_PADRON_ZIP, "r") as z:
-            in_zip_name = z.filelist[0].filename
-            z.extractall(SUNAT_FOLDER)
-            os.rename(
-                os.path.join(SUNAT_FOLDER, in_zip_name), os.path.relpath(TEMP_DB_TXT)
-            )
-
         try:
+            if not os.path.exists(PATH_PADRON_ZIP):
+                raise FileNotFoundError(
+                    f"No se encontró {PATH_PADRON_ZIP}, por favor descargue el padrón."
+                )
+
+            if not zipfile.is_zipfile(PATH_PADRON_ZIP):
+                os.remove(PATH_PADRON_ZIP)
+                raise zipfile.BadZipFile(
+                    "Padrón dañado, por favor vuelva a descargarlo."
+                )
+
+            if os.path.exists(TEMP_DB):
+                os.remove(TEMP_DB)
+
+            self.log("⚙️ Iniciando optimización...")
+            with zipfile.ZipFile(PATH_PADRON_ZIP, "r") as z:
+                in_zip_name = z.filelist[0].filename
+                z.extractall(SUNAT_FOLDER)
+                os.rename(
+                    os.path.join(SUNAT_FOLDER, in_zip_name),
+                    os.path.relpath(TEMP_DB_TXT),
+                )
+
             self.log("Limpiando base de datos...")
             txt_to_db.sanitize_csv(TEMP_DB_TXT, TEMP_SANITIZED_TXT)
             os.remove(TEMP_DB_TXT)
