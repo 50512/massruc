@@ -5,25 +5,7 @@ from typing import Callable
 
 import pandas as pd
 
-
-def count_lines(file_path: str) -> int:
-    """
-    Devuelve el número de lineas que contiene un archivo de texto.
-    Args:
-        file_path: Ruta del archivo a contar.
-    Returns:
-        Número de lineas del archivo.
-    """
-    with open(file_path, "rb") as file:
-        lines = 0
-        buf_size = 1024 * 1024
-        read_f = file.raw.read
-
-        buf = read_f(buf_size)
-        while buf:
-            lines += buf.count(b"\n")
-            buf = read_f(buf_size)
-        return lines
+from massruc.utils import count_lines
 
 
 def sanitize_csv(
@@ -66,7 +48,7 @@ def convert_txt_to_sql(
 ) -> str:
     """
     Convierte una entrada en txt o csv a una base de datos sql.
-    
+
     Args:
         input_txt: Ruta del archivo CSV o txt de entrada.
         output_db: Ruta del archivo de destino.
