@@ -1,6 +1,7 @@
 import sqlite3
 from typing import Any, Callable, Sequence
 
+import pandas as pd
 import requests
 from rich.progress import Progress
 
@@ -161,6 +162,45 @@ def buscar_ruc(
     res = cursor.fetchone()
     cursor.close()
     return res if res else None
+
+
+def buscar_rucs_desde_excel(
+    excel_path: str,
+    path_db: str,
+    column_name: str = "Documento",
+    table_name: str = "main_table",
+) -> list[tuple[Any, ...]]:
+    """
+    Realiza búsqueda masiva de los RUC's obtenidos desde un excel.
+
+    Args:
+        excel_path: Ruta del archivo Excel de entrada.
+        path_db: Ruta de la base de datos del padrón RUC.
+        column_name: Nombre de la columna de Excel que contiene los números de documento (RUC o DNI) a verificar.
+        table_name: Nombre de la tabla a buscar.
+    Returns:
+        Regresa una lista de tuplas de todos los RUC's buscados, y si es que se encontró, sus datos solicitados.
+    """
+    df_user = pd.read_excel(excel_path, dtype=str)
+
+    # Buscar columna
+    col_doc = next(
+        (
+            c
+            for c in df_user.columns
+            if str(c).strip().lower() == column_name.strip().lower()
+        ),
+        None,
+    )
+    if not col_doc:
+        raise LookupError(f"No se encontró columna '{column_name}' en el Excel.")
+
+    # Procesar
+    total_filas = len(df_user)
+    print(f"Analizando {total_filas} registros...")
+    resultados = buscar_rucs(df_user[col_doc], path_db, table_name)
+    resultados = [map(str, res) for res in resultados]
+    return resultados
 
 
 def limpiar_rucs(lista_rucs: Sequence[int | str]) -> list[str | None]:

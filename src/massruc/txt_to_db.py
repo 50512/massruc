@@ -4,6 +4,7 @@ from os import path, remove
 from typing import Callable
 
 import pandas as pd
+from rich.progress import Progress
 
 from massruc.utils import count_lines
 
@@ -47,7 +48,7 @@ def convert_txt_to_sql(
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
     """
-    Convierte una entrada en txt o csv a una base de datos sql.
+    Convierte una entrada en txt o csv a una base de datos sql y la indexa.
 
     Args:
         input_txt: Ruta del archivo CSV o txt de entrada.
@@ -85,26 +86,29 @@ def convert_txt_to_sql(
             dtype="str",
         )
 
-        for i, chunk in enumerate(chunks):
-            chunk.columns = chunk.columns.str.strip().str.lower().str.replace(" ", "_")
-
-            if "ruc" in chunk.columns:
-                # 'coerce' convierte cualquier error a NaN
-                chunk["ruc"] = (
-                    pd.to_numeric(chunk["ruc"], errors="coerce")
-                    .fillna(0)
-                    .astype("int64")
+        with Progress() as bar:
+            tarea = bar.add_task("Procesando CSV a SQL", total=total_lines)
+            for _, chunk in enumerate(chunks):
+                chunk.columns = (
+                    chunk.columns.str.strip().str.lower().str.replace(" ", "_")
                 )
 
-            chunk.to_sql(table_name, connection, if_exists="append", index=False)
+                if "ruc" in chunk.columns:
+                    # 'coerce' convierte cualquier error a NaN
+                    chunk["ruc"] = (
+                        pd.to_numeric(chunk["ruc"], errors="coerce")
+                        .fillna(0)
+                        .astype("int64")
+                    )
 
-            rows_in_chunk = len(chunk)
-            rows_processed += rows_in_chunk
+                chunk.to_sql(table_name, connection, if_exists="append", index=False)
 
-            if progress_callback:
-                progress_callback(min(rows_processed / total_lines, 1.0))
-            else:
-                print(f"Chunk {i+1} procesado")
+                rows_in_chunk = len(chunk)
+                rows_processed += rows_in_chunk
+
+                bar.update(tarea, completed=rows_processed)
+                if progress_callback:
+                    progress_callback(min(rows_processed / total_lines, 1.0))
 
         print("Indexando la tabla")
         index_time = time.time()

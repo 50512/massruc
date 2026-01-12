@@ -222,23 +222,11 @@ class SunatApp:
             start_time = time.time()
             # Cargar Excel
             self.log(f"Leyendo Excel: {os.path.basename(archivo_input)}")
-            df_user = pd.read_excel(archivo_input, dtype=str)
-
-            # Buscar columna
-            col_doc = next(
-                (c for c in df_user.columns if str(c).strip().lower() == "documento"),
-                None,
+            resultados = ruc_utils.buscar_rucs_desde_excel(
+                archivo_input, PATH_PADRON_DB, "Documento", NOMBRE_PADRON_TABLE
             )
-            if not col_doc:
-                raise LookupError("No se encontró columna 'Documento' en el Excel.")
 
-            # Procesar
-            total_filas = len(df_user)
-            self.log(f"Analizando {total_filas} registros...")
-            resultados = ruc_utils.buscar_rucs(
-                df_user[col_doc], PATH_PADRON_DB, NOMBRE_PADRON_TABLE
-            )
-            resultados = [map(str, res) for res in resultados]
+            self.log(f"{len(resultados)} registros procesados.")
 
             # Guardar
             self.update_progress_bar(100)
