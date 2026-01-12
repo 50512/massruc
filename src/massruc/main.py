@@ -37,6 +37,7 @@ class SunatApp:
         # Variables
         self.archivo_seleccionado = tk.StringVar()
         self.estado_padron = tk.StringVar(value="Verificando padrón...")
+        self.columna_busqueda = tk.StringVar(value='Documento')
 
         # --- INTERFAZ ---
         # 1. Sección Padrón
@@ -63,7 +64,7 @@ class SunatApp:
 
         # 2. Sección Archivo Excel
         frame_file = tk.LabelFrame(
-            root, text="2. Archivo de Clientes", padx=10, pady=10
+            root, text="2. Archivo de Clientes - Columna a buscar", padx=10, pady=10
         )
         frame_file.pack(fill="x", padx=10, pady=5)
 
@@ -73,6 +74,11 @@ class SunatApp:
             state="readonly",
             width=50,
         ).pack(side="left", padx=5)
+        tk.Entry(
+            frame_file,
+            textvariable=self.columna_busqueda,
+            width=20,
+        ).pack(side='left',padx=5)
         tk.Button(
             frame_file,
             text="📂 Seleccionar Excel",
@@ -219,11 +225,13 @@ class SunatApp:
 
         try:
             self.log("🔎 Iniciando búsqueda...")
+            columna_busqueda = self.columna_busqueda.get()
             start_time = time.time()
             # Cargar Excel
             self.log(f"Leyendo Excel: {os.path.basename(archivo_input)}")
+            self.log(f"Buscando columna: {columna_busqueda}")
             resultados = ruc_utils.buscar_rucs_desde_excel(
-                archivo_input, PATH_PADRON_DB, "Documento", NOMBRE_PADRON_TABLE
+                archivo_input, PATH_PADRON_DB, columna_busqueda, NOMBRE_PADRON_TABLE
             )
 
             self.log(f"{len(resultados)} registros procesados.")
