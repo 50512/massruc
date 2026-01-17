@@ -12,6 +12,28 @@ RUC_QUERY_ERRORS = {
 }
 
 
+def obtener_cabecera_db(
+    path_db: str, table_name: str = "main_table", num_columns: int = 4
+) -> list[str]:
+    """
+    Obtiene la cabecera de las primeras `num_columns` columnas de la base de datos con un máximo de 15
+    Args:
+        path_db: Ruta del padrón ruc reducido (SQL).
+        table_name: Nombre de la tabla a consultar.
+        num_columns: Número de columnas a consular.
+    Returns:
+        Lista con los nombres de las cabeceras.
+    """
+    con = sqlite3.connect(path_db)
+    cursor = con.cursor()
+    cursor.execute(f"SELECT name FROM pragma_table_info('{table_name}')")
+    res = cursor.fetchall()
+    res = [r[0] for r in res]
+    res = res[:num_columns]
+
+    return res
+
+
 def descargar_padron_reducido(
     output_file: str = "padron_reducido_ruc.zip",
     progress_callback: Callable[[float], None] | None = None,
@@ -62,7 +84,10 @@ def descargar_padron_reducido(
 
 
 def buscar_rucs(
-    lista_rucs: Sequence[str | int], path_db: str, table_name: str = "main_table"
+    lista_rucs: Sequence[str | int],
+    path_db: str,
+    table_name: str = "main_table",
+    num_columns: int = 4,
 ) -> list[tuple[Any, ...] | None]:
     """
     Devuelve una lista de tuplas que contienen la información de los RUC's buscados
@@ -70,9 +95,12 @@ def buscar_rucs(
         lista_rucs: Lista con los documentos (RUC o DNI) a buscar.
         path_db: Ruta del padrón ruc reducido (SQL).
         table_name: Nombre de la tabla a consultar.
+        num_columns: Número de columnas a guardar (las primeras `num_columns`)
 
     Returns:
-        Lista de tuplas `(ruc, nombre_o_razón_social, estado_de_contribuyente, condición_de_domicilio)` de los RUC's encontrados.
+        Lista de tuplas `(ruc, nombre_o_razón_social, estado_de_contribuyente, condición_de_domicilio)` por defecto de los RUC's encontrados.
+
+        Se pueden solicitar más columnas de la tabla con `num_columns` hasta un máximo de 15
     """
     rucs_enteros = [int(ruc) for ruc in limpiar_rucs(lista_rucs)]
     CHUNK_SQL_SIZE = 900
@@ -81,7 +109,6 @@ def buscar_rucs(
 
     con = sqlite3.connect(path_db)
     cursor = con.cursor()
-    num_columnas = 0
     try:
         for i in range(0, len(rucs_enteros), CHUNK_SQL_SIZE):
             lote = rucs_enteros[i : i + CHUNK_SQL_SIZE]
@@ -92,11 +119,11 @@ def buscar_rucs(
             cursor.execute(consulta, lote)
             filas = cursor.fetchall()
 
-            if num_columnas == 0 and cursor.description:
-                num_columnas = len(cursor.description)
+            if cursor.description and num_columns > cursor.description:
+                num_columns = cursor.description
 
             for fila in filas:
-                db_cache[fila[0]] = fila
+                db_cache[fila[0]] = fila[:num_columns]
 
     except Exception as e:
         print(f"Error en consulta DB: {e}")
@@ -126,7 +153,7 @@ def buscar_rucs(
                     limpiar_ruc(ruc_limpio),
                 )
                 + (ruc_failed,)
-                + ("-",) * (num_columnas - 2)
+                + ("-",) * (num_columns - 2)
             )
             resultados_finales.append(tupla_vacia)
 
@@ -134,7 +161,10 @@ def buscar_rucs(
 
 
 def buscar_ruc(
-    doc_number: str | int, path_db: str, table_name: str = "main_table"
+    doc_number: str | int,
+    path_db: str,
+    table_name: str = "main_table",
+    num_columns: int = 4,
 ) -> tuple | None:
     """
     Devuelve una tupla con los datos del RUC consultado o `None` en caso de no encontrarlo
@@ -143,9 +173,12 @@ def buscar_ruc(
         doc_number: Número de documento (RUC o DNI)
         path_db: Ruta del padrón ruc reducido (SQL)
         table_name: Nombre de la tabla a consultar
+        num_columns: Número de columnas a consultar
 
     Returns:
-        Tupla que contiene el resultado de la consulta `(ruc, nombre_o_razón_social, estado_de_contribuyente, condición_de_domicilio)` o `None` en caso de no encontrarlo
+        Tupla que contiene el resultado de la consulta `(ruc, nombre_o_razón_social, estado_de_contribuyente, condición_de_domicilio)` o `None` en caso de no encontrarlo.
+
+        Se pueden consultar mas columnas con `num_columns` hasta un máximo de 15
     """
     ruc_buscado = limpiar_ruc(doc_number)
     if not ruc_buscado:
@@ -159,7 +192,7 @@ def buscar_ruc(
     consulta = f"SELECT * FROM {table_name} WHERE ruc = {ruc_buscado}"
     cursor.execute(consulta)
 
-    res = cursor.fetchone()
+    res = cursor.fetchone()[:num_columns]
     cursor.close()
     return res if res else None
 

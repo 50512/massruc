@@ -37,7 +37,7 @@ class SunatApp:
         # Variables
         self.archivo_seleccionado = tk.StringVar()
         self.estado_padron = tk.StringVar(value="Verificando padrón...")
-        self.columna_busqueda = tk.StringVar(value='Documento')
+        self.columna_busqueda = tk.StringVar(value="Documento")
 
         # --- INTERFAZ ---
         # 1. Sección Padrón
@@ -78,7 +78,7 @@ class SunatApp:
             frame_file,
             textvariable=self.columna_busqueda,
             width=20,
-        ).pack(side='left',padx=5)
+        ).pack(side="left", padx=5)
         tk.Button(
             frame_file,
             text="📂 Seleccionar Excel",

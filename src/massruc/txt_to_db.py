@@ -11,7 +11,7 @@ from massruc.utils import count_lines
 
 def sanitize_csv(
     input_file: str, output_file: str, expected_fields: int = 4, separator: str = "|"
-) -> None:
+) -> str:
     """
     Convierte texto en `latin-1` a `UTF-8` y guarda los primeros `expected_fields` campos.
     Args:
@@ -19,6 +19,8 @@ def sanitize_csv(
         output_file: Ruta del archivo de salida.
         expected_fields: Campos a guardar del CSV.
         separator: Separador del CSV.
+    Returns:
+        Ruta del archivo de salida.
     """
     clean_lines = []
 
@@ -37,6 +39,7 @@ def sanitize_csv(
     # export file in utf-8 for most compatibility
     with open(output_file, "w", encoding="utf-8") as file:
         file.write("\n".join(clean_lines))
+    return output_file
 
 
 def convert_txt_to_sql(
