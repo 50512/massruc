@@ -246,7 +246,7 @@ def guardar_excel_rucs_formateado(
     output_path: str,
     path_db: str,
     table_name: str = "main_table",
-):
+) -> str:
     """
     Guarda la lista de RUC's ingresada en un archivo Excel, formateando de acuerdo si fueron RUC's encontrados, no encontrados o inválidos.
     Args:

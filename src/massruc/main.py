@@ -4,6 +4,7 @@ import time
 import tkinter as tk
 import zipfile
 from tkinter import filedialog, messagebox, scrolledtext, ttk
+from typing import Literal
 
 from massruc import ruc_utils, txt_to_db, utils
 
@@ -140,12 +141,13 @@ class SunatApp:
             self.lbl_padron.config(fg="green")
             self.btn_descargar.config(state="normal")
 
-    def update_progress_bar(self, decimal_percentage):
+    def update_progress_bar(self, decimal_percentage: float):
         self.root.after(
             0, lambda: self._set_progress_bar(decimal_percentage=decimal_percentage)
         )
 
-    def _set_progress_bar(self, decimal_percentage):
+    def _set_progress_bar(self, decimal_percentage: float):
+        self.set_progress_mode("determinate")
         percentage = 0
         if decimal_percentage <= 0.0:
             percentage = 0
@@ -155,6 +157,15 @@ class SunatApp:
             percentage = decimal_percentage * 100
         self.progress["value"] = percentage
         self.root.update_idletasks()
+
+    def set_progress_mode(self, mode: Literal["determinate", "indeterminate"]):
+        if str(self.progress["mode"]) != mode:
+            self.progress["value"] = 0
+            self.progress.config(mode=mode)
+            if mode == "indeterminate":
+                self.progress.start()
+            elif mode == "determinate":
+                self.progress.stop()
 
     # --- HILOS (THREADS) ---
     def iniciar_descarga_thread(self):
@@ -169,8 +180,8 @@ class SunatApp:
     # --- LÓGICA PRINCIPAL ---
     def descargar_logica(self):
         # al descargar una nueva base, se elimina la anterior
-        if os.path.exists(PATH_PADRON_DB):
-            os.remove(PATH_PADRON_DB)
+        utils.secure_remove(PATH_PADRON_DB)
+        utils.secure_remove(PATH_PADRON_ZIP)
 
         self.btn_descargar.config(state="disabled")
         self.btn_procesar.config(state="disabled")
@@ -184,8 +195,10 @@ class SunatApp:
                 PATH_PADRON_ZIP, progress_callback=self.update_progress_bar
             )
 
+            self.set_progress_mode("indeterminate")
+
             if not utils.verificador_integridad_zip(PATH_PADRON_ZIP):
-                os.remove(PATH_PADRON_ZIP)
+                utils.secure_remove(PATH_PADRON_ZIP)
                 raise zipfile.BadZipFile(
                     "Archivo dañado, por favor volver a descargar."
                 )
@@ -199,7 +212,7 @@ class SunatApp:
             self.btn_descargar.config(state="normal")
             if self.archivo_seleccionado.get():
                 self.btn_procesar.config(state="normal")
-            self.progress["value"] = 0
+            self.update_progress_bar(0)
             self.root.after(0, self.verificar_padron_local)
 
     def seleccionar_excel(self):
@@ -216,10 +229,11 @@ class SunatApp:
 
     def procesar_logica(self):
         self.btn_procesar.config(state="disabled")
-        self.update_progress_bar(0)
+
         archivo_input = self.archivo_seleccionado.get()
 
         try:
+            self.set_progress_mode("indeterminate")
             self.log("🔎 Iniciando búsqueda...")
             columna_busqueda = self.columna_busqueda.get()
             start_time = time.time()
@@ -233,13 +247,13 @@ class SunatApp:
             self.log(f"{len(resultados)} registros procesados.")
 
             # Guardar
-            self.update_progress_bar(100)
             self.log("💾 Guardando y formateando Excel...")
             nombre_salida = os.path.splitext(archivo_input)[0] + "_PROCESADO.xlsx"
             ruc_utils.guardar_excel_rucs_formateado(
                 resultados, nombre_salida, PATH_PADRON_DB, NOMBRE_PADRON_TABLE
             )
 
+            self.update_progress_bar(100)
             self.log(f"✅ ¡ÉXITO! Archivo guardado:\n{os.path.basename(nombre_salida)}")
             self.log(
                 f"Operación completada en {round(time.time()-start_time,2)} segundos"
@@ -252,6 +266,7 @@ class SunatApp:
         except Exception as e:
             self.log(f"❌ ERROR CRÍTICO: {str(e)}")
             messagebox.showerror("Error", str(e))
+            self.update_progress_bar(0)
 
         finally:
             self.btn_procesar.config(state="normal")
@@ -259,21 +274,23 @@ class SunatApp:
     def optimizar_db(self):
         TEMP_SANITIZED_TXT = os.path.join(SUNAT_FOLDER, ".sanitized_db.tmp")
         TEMP_DB = PATH_PADRON_DB + ".tmp"
-
         try:
+            self.set_progress_mode("indeterminate")
             if not os.path.exists(PATH_PADRON_ZIP):
                 raise FileNotFoundError(
                     f"No se encontró {PATH_PADRON_ZIP}, por favor descargue el padrón."
                 )
 
             if not zipfile.is_zipfile(PATH_PADRON_ZIP):
-                os.remove(PATH_PADRON_ZIP)
+                utils.secure_remove(PATH_PADRON_ZIP)
                 raise zipfile.BadZipFile(
                     "Padrón dañado, por favor vuelva a descargarlo."
                 )
 
-            if os.path.exists(TEMP_DB):
-                os.remove(TEMP_DB)
+            utils.secure_remove(TEMP_DB)
+            utils.secure_remove(TEMP_DB_TXT)
+            utils.secure_remove(TEMP_SANITIZED_TXT)
+            utils.secure_remove(PATH_PADRON_DB)
 
             self.log("⚙️ Iniciando optimización...")
             with zipfile.ZipFile(PATH_PADRON_ZIP, "r") as z:
@@ -285,8 +302,13 @@ class SunatApp:
                 )
 
             self.log("Limpiando base de datos...")
-            txt_to_db.sanitize_csv(TEMP_DB_TXT, TEMP_SANITIZED_TXT)
-            os.remove(TEMP_DB_TXT)
+            txt_to_db.sanitize_csv(
+                TEMP_DB_TXT,
+                TEMP_SANITIZED_TXT,
+                progress_callback=self.update_progress_bar,
+            )
+            self.set_progress_mode("indeterminate")
+            utils.secure_remove(TEMP_DB_TXT)
 
             self.log("Optimizando base de datos...")
             txt_to_db.convert_txt_to_sql(
@@ -296,7 +318,7 @@ class SunatApp:
                 chunk_size=10000,
                 progress_callback=self.update_progress_bar,
             )
-            os.remove(TEMP_SANITIZED_TXT)
+            utils.secure_remove(TEMP_SANITIZED_TXT)
 
             # Si es interrumpe la conversión, el archivo sera solo el temporal
             os.rename(TEMP_DB, PATH_PADRON_DB)
@@ -305,6 +327,7 @@ class SunatApp:
         except Exception as e:
             self.log(f"❌ Error en optimización: {str(e)}")
             messagebox.showerror("Error", f"Fallo en la optimización: {e}")
+            self.update_progress_bar(0)
 
         finally:
             self.root.after(0, self.verificar_padron_local)
