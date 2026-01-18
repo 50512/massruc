@@ -3,6 +3,8 @@ from typing import Any, Callable, Sequence
 
 import pandas as pd
 import requests
+from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
 from rich.progress import Progress
 
 URL_PADRON = "https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip"
@@ -13,10 +15,10 @@ RUC_QUERY_ERRORS = {
 
 
 def obtener_cabecera_db(
-    path_db: str, table_name: str = "main_table", num_columns: int = 4
+    path_db: str, table_name: str = "main_table", num_columns: None | int = None
 ) -> list[str]:
     """
-    Obtiene la cabecera de las primeras `num_columns` columnas de la base de datos con un máximo de 15
+    Obtiene la cabecera de las primeras `num_columns` columnas de la base de datos con un máximo de 15 o todas las columnas en caso de no haber `num_columns`
     Args:
         path_db: Ruta del padrón ruc reducido (SQL).
         table_name: Nombre de la tabla a consultar.
@@ -29,7 +31,8 @@ def obtener_cabecera_db(
     cursor.execute(f"SELECT name FROM pragma_table_info('{table_name}')")
     res = cursor.fetchall()
     res = [r[0] for r in res]
-    res = res[:num_columns]
+    if num_columns:
+        res = res[:num_columns]
 
     return res
 
@@ -109,6 +112,9 @@ def buscar_rucs(
 
     con = sqlite3.connect(path_db)
     cursor = con.cursor()
+
+    cabecera = obtener_cabecera_db(path_db, "padron", num_columns)
+    num_columns = len(cabecera)
     try:
         for i in range(0, len(rucs_enteros), CHUNK_SQL_SIZE):
             lote = rucs_enteros[i : i + CHUNK_SQL_SIZE]
@@ -118,9 +124,6 @@ def buscar_rucs(
 
             cursor.execute(consulta, lote)
             filas = cursor.fetchall()
-
-            if cursor.description and num_columns > cursor.description:
-                num_columns = cursor.description
 
             for fila in filas:
                 db_cache[fila[0]] = fila[:num_columns]
@@ -202,7 +205,8 @@ def buscar_rucs_desde_excel(
     path_db: str,
     column_name: str = "Documento",
     table_name: str = "main_table",
-) -> list[tuple[Any, ...]]:
+    num_columns: int = 4,
+) -> list[tuple[str, ...]]:
     """
     Realiza búsqueda masiva de los RUC's obtenidos desde un excel.
 
@@ -211,6 +215,7 @@ def buscar_rucs_desde_excel(
         path_db: Ruta de la base de datos del padrón RUC.
         column_name: Nombre de la columna de Excel que contiene los números de documento (RUC o DNI) a verificar.
         table_name: Nombre de la tabla a buscar.
+        num_columns: Número de columnas a consultar.
     Returns:
         Regresa una lista de tuplas de todos los RUC's buscados, y si es que se encontró, sus datos solicitados.
     """
@@ -231,9 +236,71 @@ def buscar_rucs_desde_excel(
     # Procesar
     total_filas = len(df_user)
     print(f"Analizando {total_filas} registros...")
-    resultados = buscar_rucs(df_user[col_doc], path_db, table_name)
-    resultados = [map(str, res) for res in resultados]
+    resultados = buscar_rucs(df_user[col_doc], path_db, table_name, num_columns)
+    resultados = [tuple(map(str, res)) for res in resultados]
     return resultados
+
+
+def guardar_excel_rucs_formateado(
+    rucs_a_guardar: Sequence[tuple],
+    output_path: str,
+    path_db: str,
+    table_name: str = "main_table",
+):
+    """
+    Guarda la lista de RUC's ingresada en un archivo Excel, formateando de acuerdo si fueron RUC's encontrados, no encontrados o inválidos.
+    Args:
+        rucs_a_guardar: Lista de RUC's a guardar.
+        output_path: Ruta del archivo Excel destino.
+        path_db: Ruta de la base de datos del padrón RUC.
+        table_name: Nombre de la tabla a consultar.
+    Returns:
+        Regresa la ruta del archivo destino.
+    """
+    len_datos = (
+        len(rucs_a_guardar[0]) - 1
+    )  # Se resta 1 por la columna de Documento Origen
+
+    #
+    db_header = obtener_cabecera_db(path_db, table_name, num_columns=len_datos)
+    db_header = [r.replace("_", " ").capitalize() for r in db_header]
+    db_header[0] = db_header[0].upper()  # Cabecera de RUC en mayúsculas
+
+    header = ["Documento origen"] + db_header
+    df_export = pd.DataFrame(rucs_a_guardar, columns=header)
+
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        df_export.to_excel(writer, index=False, sheet_name="Resultados")
+        worksheet = writer.sheets["Resultados"]
+
+        for i, column in enumerate(df_export.columns):
+            max_len_data = df_export[column].astype(str).map(len).max()
+            len_header = len(column)
+
+            max_len = (
+                max(max_len_data, len_header) if pd.notna(max_len_data) else len_header
+            )
+
+            # se añade cierto margen para mejorar la visibilidad
+            fixed_width = max_len + 2
+
+            col_letter = get_column_letter(i + 1)
+            worksheet.column_dimensions[col_letter].width = fixed_width
+
+        map_colores = {v["text"]: v["color"] for v in RUC_QUERY_ERRORS.values()}
+        cache_fills = {
+            text: PatternFill(start_color=color, end_color=color, fill_type="solid")
+            for text, color in map_colores.items()
+        }
+
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+            razon_social = str(row[2].value).strip()
+
+            if razon_social in cache_fills:
+                current_fill = cache_fills[razon_social]
+                for cell in row:
+                    cell.fill = current_fill
+        return output_path
 
 
 def limpiar_rucs(lista_rucs: Sequence[int | str]) -> list[str | None]:

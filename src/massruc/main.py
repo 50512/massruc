@@ -5,10 +5,6 @@ import tkinter as tk
 import zipfile
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-import pandas as pd
-from openpyxl.styles import PatternFill
-from openpyxl.utils import get_column_letter
-
 from massruc import ruc_utils, txt_to_db, utils
 
 # --- CONFIGURACIÓN ---
@@ -240,52 +236,9 @@ class SunatApp:
             self.update_progress_bar(100)
             self.log("💾 Guardando y formateando Excel...")
             nombre_salida = os.path.splitext(archivo_input)[0] + "_PROCESADO.xlsx"
-            header = [
-                "Documento origen",
-                "RUC Validado",
-                "Nombre o razón social",
-                "Estado de contribuyente",
-                "Condición de domicilio",
-            ]
-            df_export = pd.DataFrame(resultados, columns=header)
-
-            with pd.ExcelWriter(nombre_salida, engine="openpyxl") as writer:
-                df_export.to_excel(writer, index=False, sheet_name="Resultados")
-                worksheet = writer.sheets["Resultados"]
-
-                for i, column in enumerate(df_export.columns):
-                    max_len_data = df_export[column].astype(str).map(len).max()
-                    len_header = len(column)
-
-                    max_len = (
-                        max(max_len_data, len_header)
-                        if pd.notna(max_len_data)
-                        else len_header
-                    )
-
-                    # se añade cierto margen para mejorar la visibilidad
-                    fixed_width = max_len + 2
-
-                    col_letter = get_column_letter(i + 1)
-                    worksheet.column_dimensions[col_letter].width = fixed_width
-
-                map_colores = {
-                    v["text"]: v["color"] for v in ruc_utils.RUC_QUERY_ERRORS.values()
-                }
-                cache_fills = {
-                    text: PatternFill(
-                        start_color=color, end_color=color, fill_type="solid"
-                    )
-                    for text, color in map_colores.items()
-                }
-
-                for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
-                    razon_social = str(row[2].value).strip()
-
-                    if razon_social in cache_fills:
-                        current_fill = cache_fills[razon_social]
-                        for cell in row:
-                            cell.fill = current_fill
+            ruc_utils.guardar_excel_rucs_formateado(
+                resultados, nombre_salida, PATH_PADRON_DB, NOMBRE_PADRON_TABLE
+            )
 
             self.log(f"✅ ¡ÉXITO! Archivo guardado:\n{os.path.basename(nombre_salida)}")
             self.log(
