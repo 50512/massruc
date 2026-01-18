@@ -1,3 +1,4 @@
+import os
 import zipfile
 
 
@@ -38,6 +39,21 @@ def verificador_integridad_zip(path_zip: str) -> bool:
             return False
         else:
             return True
+
+
+def secure_remove(file: str) -> bool:
+    """
+    Verifica que un archivo existe, y de ser así, lo elimina. Regresa un booleano de si se logro borrar o no el archivo
+
+    Args:
+        file: Ruta del archivo a borrar
+    Returns:
+        Regresa `True` si se borró un archivo o `False` si no se borró nada
+    """
+    if os.path.exists(file):
+        os.remove(file)
+        return True
+    return False
 
 
 def main():
