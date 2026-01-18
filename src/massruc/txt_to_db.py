@@ -10,7 +10,11 @@ from massruc.utils import count_lines
 
 
 def sanitize_csv(
-    input_file: str, output_file: str, expected_fields: int = 4, separator: str = "|"
+    input_file: str,
+    output_file: str,
+    expected_fields: int = 4,
+    separator: str = "|",
+    progress_callback: Callable[[float], None] | None = None,
 ) -> str:
     """
     Convierte texto en `latin-1` a `UTF-8` y guarda los primeros `expected_fields` campos.
@@ -19,22 +23,31 @@ def sanitize_csv(
         output_file: Ruta del archivo de salida.
         expected_fields: Campos a guardar del CSV.
         separator: Separador del CSV.
+        progress_callback: Función que recibe un `float` (0.0 - 1.0) para reportar el progreso de la limpieza.
     Returns:
         Ruta del archivo de salida.
     """
     clean_lines = []
-
+    total_lines = count_lines(input_file)
     # open file on latin-1 for correct reading
-    with open(input_file, "r", encoding="latin-1") as file:
-        for i, line in enumerate(file):
-            line = line.strip()
+    with Progress() as bar:
+        tarea = bar.add_task("Limpiando txt", total=total_lines)
+        with open(input_file, "r", encoding="latin-1") as file:
+            for i, line in enumerate(file):
+                line = line.strip()
 
-            fields = line.split(separator, expected_fields)[:expected_fields]
+                fields = line.split(separator, expected_fields)[:expected_fields]
 
-            if len(fields) == expected_fields:
-                clean_lines.append("|".join(fields))
-            else:
-                print(f"Error en linea {i}")
+                if len(fields) == expected_fields:
+                    clean_lines.append("|".join(fields))
+                else:
+                    print(f"Error en linea {i}")
+
+                if i % 1000 == 0:
+                    bar.update(tarea, completed=i)
+
+                    if progress_callback:
+                        progress_callback(min(i / total_lines, 1.0))
 
     # export file in utf-8 for most compatibility
     with open(output_file, "w", encoding="utf-8") as file:
