@@ -69,12 +69,12 @@ class SunatApp:
             frame_file,
             textvariable=self.archivo_seleccionado,
             state="readonly",
-            width=50,
+            width=30,
         ).pack(side="left", padx=5)
         tk.Entry(
             frame_file,
             textvariable=self.columna_busqueda,
-            width=20,
+            width=15,
         ).pack(side="left", padx=5)
         tk.Button(
             frame_file,
