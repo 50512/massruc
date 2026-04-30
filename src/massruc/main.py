@@ -65,24 +65,27 @@ class SunatApp:
         )
         frame_file.pack(fill="x", padx=10, pady=5)
 
+        frame_file.columnconfigure(0, weight=1) 
+        frame_file.columnconfigure(1, weight=0)
+        frame_file.columnconfigure(2, weight=0)
+
         tk.Entry(
             frame_file,
             textvariable=self.archivo_seleccionado,
-            state="readonly",
-            width=30,
-        ).pack(side="left", padx=5)
+            state="readonly"
+        ).grid(row=0, column=0, padx=5, sticky="ew")
         tk.Entry(
             frame_file,
             textvariable=self.columna_busqueda,
             width=15,
-        ).pack(side="left", padx=5)
+        ).grid(row=0, column=1, padx=5, sticky="w")
         tk.Button(
             frame_file,
             text="📂 Seleccionar Excel",
             command=self.seleccionar_excel,
             bg="#2196F3",
             fg="white",
-        ).pack(side="right")
+        ).grid(row=0, column=2, padx=5, sticky="e")
 
         # 3. Sección Procesar
         frame_action = tk.Frame(root, padx=10, pady=10)
